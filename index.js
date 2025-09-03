@@ -20,6 +20,7 @@ const volumeTabungRoutes = require('./src/routes/volume_tabung');
 const auditRoutes = require('./src/routes/audit');
 const authPelangganRoutes = require('./src/routes/auth_pelanggan');
 const saldoPelangganRoutes = require('./src/routes/saldo_pelanggan');
+const depositPelangganRoutes = require('./src/routes/deposit_pelanggan');
 
 app.use('/pelanggan', saldoPelangganRoutes);
 
@@ -43,6 +44,9 @@ app.use('/tabung', TabungTurunGudang);
 app.use('/volume', volumeTabungRoutes);
 // AUDITOR
 app.use('/audit', auditRoutes);
+// PELANGGAN  
+app.use('/pelanggan', saldoPelangganRoutes);
+app.use('/pelanggan', depositPelangganRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
