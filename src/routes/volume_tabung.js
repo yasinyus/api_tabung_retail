@@ -17,11 +17,11 @@ function authUser(req, res, next) {
 }
 
 router.post('/simpan', authUser, async (req, res) => {
-  const { lokasi, tabung, nama, keterangan } = req.body;
+  const { lokasi, tabung, volume_total, status, nama, keterangan } = req.body;
   
-  if (!lokasi || !tabung || !nama) {
+  if (!lokasi || !tabung || !nama || typeof volume_total !== 'number') {
     return res.status(400).json({ 
-      message: 'Field wajib diisi: lokasi, tabung, nama' 
+      message: 'Field wajib diisi: lokasi, tabung, volume_total, nama' 
     });
   }
   
@@ -31,11 +31,32 @@ router.post('/simpan', authUser, async (req, res) => {
     });
   }
   
-  // Validasi format tabung
+  // Hitung volume per tabung dari pembagian volume_total
+  const volume_per_tabung = volume_total / tabung.length;
+  
+  // Update array tabung dengan volume yang dihitung
+  const tabungWithVolume = tabung.map(item => ({
+    kode_tabung: item.kode_tabung,
+    volume: volume_per_tabung
+  }));
+  
+  // Validasi format tabung dan cek keberadaan di tabel tabungs
   for (let i = 0; i < tabung.length; i++) {
-    if (!tabung[i].qr_code || typeof tabung[i].volume !== 'number') {
+    if (!tabung[i].kode_tabung) {
       return res.status(400).json({
-        message: 'Format tabung tidak valid. Setiap tabung harus memiliki qr_code dan volume (number)'
+        message: 'Format tabung tidak valid. Setiap tabung harus memiliki kode_tabung'
+      });
+    }
+    
+    // Cek apakah kode_tabung exist di tabel tabungs
+    const [tabungExists] = await db.query(
+      'SELECT kode_tabung FROM tabungs WHERE kode_tabung = ?', 
+      [tabung[i].kode_tabung]
+    );
+    
+    if (tabungExists.length === 0) {
+      return res.status(400).json({
+        message: `Kode tabung ${tabung[i].kode_tabung} tidak ditemukan di database`
       });
     }
   }
@@ -48,30 +69,61 @@ router.post('/simpan', authUser, async (req, res) => {
     // Format created_at YYYY-MM-DD HH:MM:SS
     const created_at = new Date();
     
-    // Hitung total volume dari semua tabung (satuan m³)
-    const total_volume = tabung.reduce((sum, item) => sum + item.volume, 0);
+    // Status tabung: isi/kosong, default isi
+    const status_tabung = status || 'isi';
     
     const query = `
-      INSERT INTO volume_tabungs (tanggal, lokasi, tabung, nama, keterangan, created_at) 
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO volume_tabungs (tanggal, lokasi, tabung, nama, volume_total, status, keterangan, created_at) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     const [result] = await db.query(query, [
       tanggal,
       lokasi,
-      JSON.stringify(tabung), // Simpan array tabung sebagai JSON
+      JSON.stringify(tabungWithVolume), // Simpan array tabung dengan volume yang dihitung
       nama,
+      volume_total,
+      status_tabung,
       keterangan || '', // Keterangan opsional
       created_at
     ]);
     
+    // Update/Insert ke tabel stok_tabung untuk setiap tabung
+    const tanggal_update = new Date();
+    
+    for (const item of tabungWithVolume) {
+      // Cek apakah kode_tabung sudah ada
+      const [existingStock] = await db.query(
+        'SELECT id FROM stok_tabung WHERE kode_tabung = ?', 
+        [item.kode_tabung]
+      );
+      
+      if (existingStock.length > 0) {
+        // Update jika sudah ada
+        await db.query(
+          'UPDATE stok_tabung SET status = ?, volume = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?',
+          ['Isi', item.volume, lokasi, tanggal_update, item.kode_tabung]
+        );
+      } else {
+        // Insert jika belum ada
+        await db.query(
+          'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [item.kode_tabung, 'Isi', item.volume, lokasi, tanggal_update, tanggal_update]
+        );
+      }
+    }
+    
     res.json({ 
-      message: 'Data volume tabung berhasil disimpan',
+      message: 'Data volume tabung berhasil disimpan dan stok diperbarui',
       id: result.insertId,
       tanggal: tanggal,
       total_tabung: tabung.length,
-      total_volume: `${total_volume} m³`,
+      volume_total: volume_total,
+      volume_per_tabung: volume_per_tabung,
+      status: status_tabung,
       keterangan: keterangan || '',
+      tabung_detail: tabungWithVolume,
+      stok_updated: `${tabungWithVolume.length} tabung diperbarui`,
       created_at: created_at
     });
   } catch (err) {
