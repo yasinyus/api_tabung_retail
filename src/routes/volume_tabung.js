@@ -111,6 +111,12 @@ router.post('/simpan', authUser, async (req, res) => {
           [item.kode_tabung, 'Isi', item.volume, lokasi, tanggal_update, tanggal_update]
         );
       }
+      
+      // Update siklus di tabel tabungs (tambah 1 dari nilai sebelumnya)
+      await db.query(
+        'UPDATE tabungs SET siklus = COALESCE(siklus, 0) + 1 WHERE kode_tabung = ?',
+        [item.kode_tabung]
+      );
     }
     
     res.json({ 

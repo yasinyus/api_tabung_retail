@@ -93,6 +93,17 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
           [trx_id, id_user, customer_id, transaction_date, 'purchase', total_harga, total_tabung, 'cash', 'paid', waktu]
         );
         
+        // Insert ke tabel detail_transaksi dengan array semua tabung
+        const tabung_array = tabung_details.map(detail => ({
+          kode_tabung: detail.kode_tabung,
+          volume: detail.volume
+        }));
+        
+        await db.query(
+          'INSERT INTO detail_transaksi (trx_id, tabung, created_at) VALUES (?, ?, ?)',
+          [trx_id, JSON.stringify(tabung_array), waktu]
+        );
+        
         // Kurangi saldo pelanggan setelah transaksi berhasil
         await db.query('UPDATE saldo_pelanggans SET saldo = saldo - ? WHERE kode_pelanggan = ?', [total_harga, tujuan]);
         
