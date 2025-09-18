@@ -107,6 +107,18 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
         // Kurangi saldo pelanggan setelah transaksi berhasil
         await db.query('UPDATE saldo_pelanggans SET saldo = saldo - ? WHERE kode_pelanggan = ?', [total_harga, tujuan]);
         
+        // Get sisa deposit setelah pengurangan
+        const [saldoData] = await db.query('SELECT saldo FROM saldo_pelanggans WHERE kode_pelanggan = ?', [tujuan]);
+        const sisa_deposit = saldoData.length > 0 ? saldoData[0].saldo : 0;
+        
+        // Insert ke tabel laporan_pelanggan
+        const today = new Date();
+        const tanggal_laporan = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+        await db.query(
+          'INSERT INTO laporan_pelanggan (tanggal, kode_pelanggan, keterangan, tabung, harga, tambahan_deposit, pengurangan_deposit, sisa_deposit, konfirmasi, list_tabung, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [tanggal_laporan, tujuan, 'Tagihan', total_tabung, total_harga, 0, total_harga, sisa_deposit, 0, JSON.stringify(tabung), waktu]
+        );
+        
         res.json({ 
           message: 'Data aktivitas dan transaksi berhasil disimpan, saldo pelanggan telah dikurangi',
           aktivitas_id: activityResult.insertId,
