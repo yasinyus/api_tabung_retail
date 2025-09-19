@@ -65,11 +65,27 @@ router.post('/simpan', authUser, async (req, res) => {
       created_at
     ]);
     
+    // Update lokasi di tabel stok_tabung berdasarkan hasil audit
+    for (const item of tabung) {
+      if (item.qr_code) {
+        try {
+          await db.query(
+            'UPDATE stok_tabung SET lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?',
+            [lokasi, created_at, item.qr_code]
+          );
+        } catch (updateError) {
+          console.log(`Warning: Gagal update lokasi untuk tabung ${item.qr_code}:`, updateError.message);
+        }
+      }
+    }
+    
     res.json({ 
-      message: 'Data audit berhasil disimpan',
+      message: 'Data audit berhasil disimpan dan lokasi tabung diperbarui',
       id: result.insertId,
       tanggal: tanggal,
       total_tabung: tabung.length,
+      lokasi_audit: lokasi,
+      tabung_updated: tabung.length,
       keterangan: keterangan || '',
       created_at: created_at
     });
