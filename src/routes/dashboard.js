@@ -151,4 +151,159 @@ router.get('/stok/:kode_tabung', authUser, async (req, res) => {
   }
 });
 
+// History aktivitas_tabung untuk user hari ini
+router.get('/history/today', authUser, async (req, res) => {
+  const id_user = req.user.id;
+  
+  try {
+    // Format tanggal hari ini untuk filter
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    
+    // Get aktivitas_tabung berdasarkan id_user untuk hari ini
+    const [historyToday] = await db.query(`
+      SELECT 
+        id,
+        dari,
+        tujuan,
+        tabung,
+        keterangan,
+        nama_petugas,
+        total_tabung,
+        tanggal,
+        waktu,
+        nama_aktivitas,
+        status,
+        created_at
+      FROM aktivitas_tabung 
+      WHERE id_user = ? 
+        AND waktu >= ? 
+        AND waktu < ?
+      ORDER BY waktu DESC
+    `, [id_user, todayStart, todayEnd]);
+    
+    // Parse tabung JSON untuk setiap record
+    const processedHistory = historyToday.map(record => ({
+      ...record,
+      tabung_list: JSON.parse(record.tabung || '[]'),
+      tabung_count: JSON.parse(record.tabung || '[]').length
+    }));
+    
+    res.json({
+      message: 'History aktivitas hari ini berhasil diambil',
+      user_id: id_user,
+      user_name: req.user.name,
+      date: today.toISOString().split('T')[0],
+      total_aktivitas: historyToday.length,
+      total_tabung_processed: historyToday.reduce((sum, record) => sum + record.total_tabung, 0),
+      data: processedHistory
+    });
+    
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// History aktivitas_tabung untuk user semua hari
+router.get('/history/all', authUser, async (req, res) => {
+  const id_user = req.user.id;
+  const { page = 1, limit = 50, start_date, end_date } = req.query;
+  
+  try {
+    let dateFilter = '';
+    let queryParams = [id_user];
+    
+    // Add date range filter if provided
+    if (start_date && end_date) {
+      dateFilter = ' AND DATE(waktu) BETWEEN ? AND ?';
+      queryParams.push(start_date, end_date);
+    }
+    
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+    
+    // Get total count for pagination
+    const [countResult] = await db.query(`
+      SELECT COUNT(*) as total_records
+      FROM aktivitas_tabung 
+      WHERE id_user = ?${dateFilter}
+    `, queryParams);
+    
+    const totalRecords = countResult[0].total_records;
+    const totalPages = Math.ceil(totalRecords / limit);
+    
+    // Get aktivitas_tabung berdasarkan id_user dengan pagination
+    const [historyAll] = await db.query(`
+      SELECT 
+        id,
+        dari,
+        tujuan,
+        tabung,
+        keterangan,
+        nama_petugas,
+        total_tabung,
+        tanggal,
+        waktu,
+        nama_aktivitas,
+        status,
+        created_at
+      FROM aktivitas_tabung 
+      WHERE id_user = ?${dateFilter}
+      ORDER BY waktu DESC
+      LIMIT ? OFFSET ?
+    `, [...queryParams, parseInt(limit), offset]);
+    
+    // Parse tabung JSON untuk setiap record
+    const processedHistory = historyAll.map(record => ({
+      ...record,
+      tabung_list: JSON.parse(record.tabung || '[]'),
+      tabung_count: JSON.parse(record.tabung || '[]').length
+    }));
+    
+    // Get summary statistics
+    const [summaryResult] = await db.query(`
+      SELECT 
+        COUNT(*) as total_aktivitas,
+        SUM(total_tabung) as total_tabung_processed,
+        COUNT(DISTINCT DATE(waktu)) as total_days_active,
+        MIN(DATE(waktu)) as first_activity_date,
+        MAX(DATE(waktu)) as last_activity_date
+      FROM aktivitas_tabung 
+      WHERE id_user = ?${dateFilter}
+    `, queryParams);
+    
+    const summary = summaryResult[0];
+    
+    res.json({
+      message: 'History aktivitas semua hari berhasil diambil',
+      user_id: id_user,
+      user_name: req.user.name,
+      pagination: {
+        current_page: parseInt(page),
+        total_pages: totalPages,
+        total_records: totalRecords,
+        limit: parseInt(limit),
+        has_next: page < totalPages,
+        has_prev: page > 1
+      },
+      summary: {
+        total_aktivitas: summary.total_aktivitas,
+        total_tabung_processed: summary.total_tabung_processed,
+        total_days_active: summary.total_days_active,
+        first_activity_date: summary.first_activity_date,
+        last_activity_date: summary.last_activity_date
+      },
+      filters: {
+        start_date: start_date || null,
+        end_date: end_date || null
+      },
+      data: processedHistory
+    });
+    
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 module.exports = router;
