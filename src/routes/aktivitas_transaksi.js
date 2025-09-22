@@ -81,10 +81,63 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
         [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
       );
       
-      // Update status tabung di stok_tabung menjadi 'Kosong' dan lokasi dengan kode_pelanggan
+      // Update atau insert ke tabel stok_tabung berdasarkan kode_tabung
+      console.log('Starting stok_tabung update/insert process for Isi status');
+      console.log('Tabung array:', tabung);
+      console.log('Status:', status);
+      console.log('Tujuan:', tujuan);
+      
+      const stokResults = [];
+      
       for (const kode_tabung of tabung) {
-        await db.query('UPDATE stok_tabung SET status = ?, lokasi = ? WHERE kode_tabung = ?', ['Kosong', tujuan, kode_tabung]);
+        try {
+          console.log(`Processing tabung: ${kode_tabung}`);
+          
+          // Cek apakah kode_tabung sudah ada di stok_tabung
+          const [existingStok] = await db.query('SELECT id FROM stok_tabung WHERE kode_tabung = ?', [kode_tabung]);
+          console.log(`Existing stok check for ${kode_tabung}:`, existingStok.length);
+          
+          if (existingStok.length > 0) {
+            // Update jika sudah ada
+            console.log(`Updating existing stok for ${kode_tabung}`);
+            const [updateResult] = await db.query(
+              'UPDATE stok_tabung SET status = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?', 
+              [status, tujuan, waktu, kode_tabung]
+            );
+            console.log(`Update result for ${kode_tabung}:`, updateResult.affectedRows);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'updated',
+              affectedRows: updateResult.affectedRows,
+              success: updateResult.affectedRows > 0
+            });
+          } else {
+            // Insert jika belum ada
+            console.log(`Inserting new stok for ${kode_tabung}`);
+            const [insertResult] = await db.query(
+              'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+              [kode_tabung, status, 0, tujuan, waktu, waktu]
+            );
+            console.log(`Insert result for ${kode_tabung}:`, insertResult.insertId);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'inserted',
+              insertId: insertResult.insertId,
+              success: insertResult.insertId > 0
+            });
+          }
+        } catch (stokError) {
+          console.error(`Error updating stok_tabung for ${kode_tabung}:`, stokError.message);
+          stokResults.push({
+            kode_tabung: kode_tabung,
+            action: 'error',
+            error: stokError.message,
+            success: false
+          });
+        }
       }
+      
+      console.log('Finished stok_tabung update/insert process for Isi status');
       
       // Insert ke tabel transactions
       try {
@@ -128,7 +181,13 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
           total_harga: total_harga,
           customer_id: tujuan,
           saldo_dikurangi: total_harga,
-          tabung_details: tabung_details
+          tabung_details: tabung_details,
+          stok_results: stokResults,
+          stok_summary: {
+            total: tabung.length,
+            successful: stokResults.filter(r => r.success).length,
+            failed: stokResults.filter(r => !r.success).length
+          }
         });
       } catch (transactionError) {
         console.log('Transaction insert error:', transactionError.message);
@@ -140,7 +199,13 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
           total_harga: total_harga,
           customer_id: tujuan,
           transaction_error: transactionError.message,
-          tabung_details: tabung_details
+          tabung_details: tabung_details,
+          stok_results: stokResults,
+          stok_summary: {
+            total: tabung.length,
+            successful: stokResults.filter(r => r.success).length,
+            failed: stokResults.filter(r => !r.success).length
+          }
         });
       }
     } else {
@@ -150,17 +215,76 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
         [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
       );
       
-      // Update status tabung di stok_tabung menjadi 'Kosong' dan lokasi dengan kode_pelanggan
+      // Update atau insert ke tabel stok_tabung berdasarkan kode_tabung
+      console.log('Starting stok_tabung update/insert process for Kosong status');
+      console.log('Tabung array:', tabung);
+      console.log('Status:', status);
+      console.log('Tujuan:', tujuan);
+      
+      const stokResults = [];
+      
       for (const kode_tabung of tabung) {
-        await db.query('UPDATE stok_tabung SET status = ?, lokasi = ? WHERE kode_tabung = ?', ['Kosong', tujuan, kode_tabung]);
+        try {
+          console.log(`Processing tabung: ${kode_tabung}`);
+          
+          // Cek apakah kode_tabung sudah ada di stok_tabung
+          const [existingStok] = await db.query('SELECT id FROM stok_tabung WHERE kode_tabung = ?', [kode_tabung]);
+          console.log(`Existing stok check for ${kode_tabung}:`, existingStok.length);
+          
+          if (existingStok.length > 0) {
+            // Update jika sudah ada
+            console.log(`Updating existing stok for ${kode_tabung}`);
+            const [updateResult] = await db.query(
+              'UPDATE stok_tabung SET status = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?', 
+              [status, tujuan, waktu, kode_tabung]
+            );
+            console.log(`Update result for ${kode_tabung}:`, updateResult.affectedRows);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'updated',
+              affectedRows: updateResult.affectedRows,
+              success: updateResult.affectedRows > 0
+            });
+          } else {
+            // Insert jika belum ada
+            console.log(`Inserting new stok for ${kode_tabung}`);
+            const [insertResult] = await db.query(
+              'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+              [kode_tabung, status, 0, tujuan, waktu, waktu]
+            );
+            console.log(`Insert result for ${kode_tabung}:`, insertResult.insertId);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'inserted',
+              insertId: insertResult.insertId,
+              success: insertResult.insertId > 0
+            });
+          }
+        } catch (stokError) {
+          console.error(`Error updating stok_tabung for ${kode_tabung}:`, stokError.message);
+          stokResults.push({
+            kode_tabung: kode_tabung,
+            action: 'error',
+            error: stokError.message,
+            success: false
+          });
+        }
       }
+      
+      console.log('Finished stok_tabung update/insert process for Kosong status');
       
       res.json({ 
         message: 'Data aktivitas berhasil disimpan',
         aktivitas_id: activityResult.insertId,
         total_tabung: total_tabung,
         activity: activity,
-        status: status
+        status: status,
+        stok_results: stokResults,
+        stok_summary: {
+          total: tabung.length,
+          successful: stokResults.filter(r => r.success).length,
+          failed: stokResults.filter(r => !r.success).length
+        }
       });
     }
   } catch (err) {

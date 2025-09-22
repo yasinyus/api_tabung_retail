@@ -25,19 +25,125 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
   if (!dari || !tujuan || !Array.isArray(tabung) || tabung.length === 0) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
+
+  // Validasi status harus sesuai ENUM database jika ada
+  if (status) {
+    const validStatuses = ['Kosong', 'Isi'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+        received: status 
+      });
+    }
+  }
+
+  // Validasi kode_tabung harus ada di tabel tabungs
+  try {
+    const placeholders = tabung.map(() => '?').join(',');
+    const [validTabungs] = await db.query(
+      `SELECT kode_tabung FROM tabungs WHERE kode_tabung IN (${placeholders})`,
+      tabung
+    );
+    
+    const validKodeTabungs = validTabungs.map(row => row.kode_tabung);
+    const invalidTabungs = tabung.filter(kode => !validKodeTabungs.includes(kode));
+    
+    if (invalidTabungs.length > 0) {
+      return res.status(400).json({
+        message: 'Invalid kode_tabung found. These tabung codes do not exist in tabungs table:',
+        invalid_codes: invalidTabungs,
+        valid_codes: validKodeTabungs
+      });
+    }
+  } catch (validationError) {
+    return res.status(500).json({
+      message: 'Error validating kode_tabung',
+      error: validationError.message
+    });
+  }
+
   const id_user = req.user.id;
   const nama_petugas = req.user.name;
   const total_tabung = tabung.length;
   const tanggal = new Date().toLocaleDateString('id-ID'); // DD/MM/YYYY
   const waktu = new Date(); // datetime otomatis
-  // const nama_aktivitas = req.activity;
-  // const status = req.status;
+  
   try {
+    // Insert ke aktivitas_tabung
     const [result] = await db.query(
       'INSERT INTO aktivitas_tabung (dari, tujuan, tabung, keterangan, nama_petugas, id_user, total_tabung, tanggal, waktu, nama_aktivitas, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
     );
-    res.json({ message: 'Sukses', id: result.insertId, total_tabung: total_tabung });
+
+    // Update atau insert ke tabel stok_tabung untuk setiap kode_tabung
+    console.log('Starting stok_tabung update/insert process');
+    console.log('Tabung array:', tabung);
+    console.log('Status:', status);
+    console.log('Tujuan:', tujuan);
+    
+    const stokResults = [];
+    
+    for (const kode_tabung of tabung) {
+      try {
+        console.log(`Processing tabung: ${kode_tabung}`);
+        
+        // Cek apakah kode_tabung sudah ada di stok_tabung
+        const [existingStok] = await db.query('SELECT id FROM stok_tabung WHERE kode_tabung = ?', [kode_tabung]);
+        console.log(`Existing stok check for ${kode_tabung}:`, existingStok.length);
+        
+        if (existingStok.length > 0) {
+          // Update jika sudah ada
+          console.log(`Updating existing stok for ${kode_tabung}`);
+          const [updateResult] = await db.query(
+            'UPDATE stok_tabung SET status = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?', 
+            [status || 'Kosong', tujuan, waktu, kode_tabung]
+          );
+          console.log(`Update result for ${kode_tabung}:`, updateResult.affectedRows);
+          stokResults.push({
+            kode_tabung: kode_tabung,
+            action: 'updated',
+            affectedRows: updateResult.affectedRows,
+            success: updateResult.affectedRows > 0
+          });
+        } else {
+          // Insert jika belum ada
+          console.log(`Inserting new stok for ${kode_tabung}`);
+          const [insertResult] = await db.query(
+            'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [kode_tabung, status || 'Kosong', 0, tujuan, waktu, waktu]
+          );
+          console.log(`Insert result for ${kode_tabung}:`, insertResult.insertId);
+          stokResults.push({
+            kode_tabung: kode_tabung,
+            action: 'inserted',
+            insertId: insertResult.insertId,
+            success: insertResult.insertId > 0
+          });
+        }
+      } catch (stokError) {
+        console.error(`Error updating stok_tabung for ${kode_tabung}:`, stokError.message);
+        stokResults.push({
+          kode_tabung: kode_tabung,
+          action: 'error',
+          error: stokError.message,
+          success: false
+        });
+      }
+    }
+    
+    console.log('Finished stok_tabung update/insert process');
+    
+    res.json({ 
+      message: 'Sukses - Aktivitas dan stok_tabung berhasil diproses', 
+      id: result.insertId, 
+      total_tabung: total_tabung,
+      stok_results: stokResults,
+      stok_summary: {
+        total: tabung.length,
+        successful: stokResults.filter(r => r.success).length,
+        failed: stokResults.filter(r => !r.success).length
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

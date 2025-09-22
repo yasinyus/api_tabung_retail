@@ -6,6 +6,7 @@ const app = express();
 // Middleware bodyParser harus di atas semua route
 app.use(bodyParser.json());
 
+
 const authRoutes = require('./src/routes/auth');
 const TerimaTabungArmada = require('./src/routes/kepala_gudang/terima_tabung_armada');
 const KirimTabungArmada = require('./src/routes/kepala_gudang/kirim_tabung_armada');
@@ -55,6 +56,7 @@ app.use('/pelanggan', transaksiPelangganRoutes);
 app.use('/api', aktivitasTransaksiRoutes);
 // DASHBOARD
 app.use('/api', dashboardRoutes);
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
