@@ -17,11 +17,11 @@ function authUser(req, res, next) {
 }
 
 router.post('/simpan', authUser, async (req, res) => {
-  const { lokasi, tabung, nama, keterangan } = req.body;
+  const { lokasi, tabung, nama, keterangan, status } = req.body;
   
-  if (!lokasi || !tabung || !nama) {
+  if (!lokasi || !tabung || !nama || !status) {
     return res.status(400).json({ 
-      message: 'Field wajib diisi: lokasi, tabung, nama' 
+      message: 'Field wajib diisi: lokasi, tabung, nama, status' 
     });
   }
   
@@ -52,8 +52,8 @@ router.post('/simpan', authUser, async (req, res) => {
     const total_volume = tabung.reduce((sum, item) => sum + item.volume, 0);
     
     const query = `
-      INSERT INTO audits (tanggal, lokasi, tabung, nama, keterangan, created_at) 
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO audits (tanggal, lokasi, tabung, nama, keterangan, status, created_at) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
     
     const [result] = await db.query(query, [
@@ -62,6 +62,7 @@ router.post('/simpan', authUser, async (req, res) => {
       JSON.stringify(tabung), // Simpan array tabung sebagai JSON
       nama,
       keterangan || '', // Keterangan opsional
+      status,
       created_at
     ]);
     
@@ -85,6 +86,7 @@ router.post('/simpan', authUser, async (req, res) => {
       tanggal: tanggal,
       total_tabung: tabung.length,
       lokasi_audit: lokasi,
+      status_audit: status,
       tabung_updated: tabung.length,
       keterangan: keterangan || '',
       created_at: created_at
