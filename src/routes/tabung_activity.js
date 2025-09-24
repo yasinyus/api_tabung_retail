@@ -313,4 +313,88 @@ router.post('/laporan_pelanggan', authKepalaGudang, async (req, res) => {
   }
 });
 
+// API untuk mengambil data pelanggan berdasarkan kode_pelanggan
+router.get('/pelanggan/:kode_pelanggan', authKepalaGudang, async (req, res) => {
+  const { kode_pelanggan } = req.params;
+  
+  if (!kode_pelanggan) {
+    return res.status(400).json({ 
+      message: 'Kode pelanggan wajib diisi' 
+    });
+  }
+  
+  try {
+    // Get data pelanggan dari tabel pelanggans - hanya data utama
+    const [pelangganData] = await db.query(`
+      SELECT * FROM pelanggans 
+      WHERE kode_pelanggan = ?
+    `, [kode_pelanggan]);
+    
+    if (pelangganData.length === 0) {
+      return res.status(404).json({ 
+        message: 'Data pelanggan tidak ditemukan',
+        kode_pelanggan: kode_pelanggan 
+      });
+    }
+    
+    const pelanggan = pelangganData[0];
+    
+    res.json({
+      message: 'Data pelanggan berhasil diambil',
+      kode_pelanggan: kode_pelanggan,
+      nama_pelanggan: pelanggan.nama_pelanggan,
+      data: pelanggan
+    });
+    
+  } catch (err) {
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: err.message,
+      kode_pelanggan: kode_pelanggan 
+    });
+  }
+});
+
+// API untuk mengambil data gudang berdasarkan kode_gudang
+router.get('/gudang/:kode_gudang', authKepalaGudang, async (req, res) => {
+  const { kode_gudang } = req.params;
+  
+  if (!kode_gudang) {
+    return res.status(400).json({ 
+      message: 'Kode gudang wajib diisi' 
+    });
+  }
+  
+  try {
+    // Get data gudang dari tabel gudangs - hanya data utama
+    const [gudangData] = await db.query(`
+      SELECT * FROM gudangs 
+      WHERE kode_gudang = ?
+    `, [kode_gudang]);
+    
+    if (gudangData.length === 0) {
+      return res.status(404).json({ 
+        message: 'Data gudang tidak ditemukan',
+        kode_gudang: kode_gudang 
+      });
+    }
+    
+    const gudang = gudangData[0];
+    
+    res.json({
+      message: 'Data gudang berhasil diambil',
+      kode_gudang: kode_gudang,
+      nama_gudang: gudang.nama_gudang,
+      data: gudang
+    });
+    
+  } catch (err) {
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: err.message,
+      kode_gudang: kode_gudang 
+    });
+  }
+});
+
 module.exports = router;
