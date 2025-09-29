@@ -113,4 +113,165 @@ router.post('/detail-transaksi', authPelanggan, async (req, res) => {
   }
 });
 
+// API untuk melihat transaksi pelanggan berdasarkan bulan
+router.get('/riwayat/:customer_id/:tahun/:bulan', authPelanggan, async (req, res) => {
+  const { customer_id, tahun, bulan } = req.params;
+  
+  if (!customer_id || !tahun || !bulan) {
+    return res.status(400).json({ 
+      message: 'Parameter wajib diisi: customer_id, tahun, bulan' 
+    });
+  }
+  
+  // Validasi format tahun dan bulan
+  const yearNum = parseInt(tahun);
+  const monthNum = parseInt(bulan);
+  
+  if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+    return res.status(400).json({ 
+      message: 'Format tahun tidak valid (2020-2030)' 
+    });
+  }
+  
+  if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+    return res.status(400).json({ 
+      message: 'Format bulan tidak valid (1-12)' 
+    });
+  }
+  
+  try {
+    // Query transaksi berdasarkan customer_id dan bulan/tahun
+    const [rows] = await db.query(`
+      SELECT 
+        t.id,
+        t.trx_id,
+        t.customer_id,
+        t.total as nominal,
+        t.notes as keterangan,
+        t.status,
+        t.payment_method,
+        t.created_at as tanggal_transaksi,
+        DATE(t.created_at) as tanggal,
+        TIME(t.created_at) as waktu,
+        dt.tabung as detail_tabung
+      FROM transactions t
+      LEFT JOIN detail_transaksi dt ON t.trx_id = dt.trx_id
+      WHERE t.customer_id = ? 
+        AND YEAR(t.created_at) = ? 
+        AND MONTH(t.created_at) = ?
+      ORDER BY t.created_at DESC
+    `, [customer_id, yearNum, monthNum]);
+    
+    if (rows.length === 0) {
+      return res.json({ 
+        message: 'Tidak ada transaksi pada bulan tersebut',
+        customer_id: customer_id,
+        periode: `${getNamaBulan(monthNum)} ${tahun}`,
+        total_transaksi: 0,
+        total_nominal: 0,
+        data: []
+      });
+    }
+    
+    // Group transaksi berdasarkan tanggal
+    const groupedByDate = {};
+    let totalNominal = 0;
+    
+    rows.forEach(row => {
+      const tanggal = row.tanggal;
+      totalNominal += parseFloat(row.nominal) || 0;
+      
+      if (!groupedByDate[tanggal]) {
+        groupedByDate[tanggal] = [];
+      }
+      
+      // Parse detail tabung jika ada
+      let detailTabung = [];
+      if (row.detail_tabung) {
+        try {
+          detailTabung = JSON.parse(row.detail_tabung);
+        } catch (e) {
+          detailTabung = [];
+        }
+      }
+      
+      groupedByDate[tanggal].push({
+        id: row.id,
+        trx_id: row.trx_id,
+        jenis_transaksi: row.keterangan || 'Virtual Account',
+        nominal: `Rp${formatRupiah(row.nominal)}`,
+        nominal_raw: parseFloat(row.nominal) || 0,
+        status: row.status === 'success' || row.status === 'completed' ? 'Berhasil' : 
+                row.status === 'pending' ? 'Pending' : 
+                row.status === 'failed' ? 'Gagal' : row.status,
+        metode_pembayaran: row.payment_method || 'Virtual Account',
+        waktu: row.waktu,
+        tanggal_transaksi: row.tanggal_transaksi,
+        detail_tabung: detailTabung,
+        jumlah_tabung: detailTabung.length
+      });
+    });
+    
+    // Convert grouped data ke format array dengan tanggal sebagai header
+    const formattedData = [];
+    Object.keys(groupedByDate)
+      .sort((a, b) => new Date(b) - new Date(a)) // Sort descending
+      .forEach(tanggal => {
+        const transaksiHari = groupedByDate[tanggal];
+        const totalHari = transaksiHari.reduce((sum, trx) => sum + trx.nominal_raw, 0);
+        
+        formattedData.push({
+          tanggal: tanggal,
+          tanggal_formatted: formatTanggalIndonesia(tanggal),
+          total_transaksi_hari: transaksiHari.length,
+          total_nominal_hari: `Rp${formatRupiah(totalHari)}`,
+          total_nominal_hari_raw: totalHari,
+          transaksi: transaksiHari
+        });
+      });
+    
+    res.json({ 
+      message: 'Riwayat transaksi berhasil diambil',
+      customer_id: customer_id,
+      periode: `${getNamaBulan(monthNum)} ${tahun}`,
+      tahun: yearNum,
+      bulan: monthNum,
+      nama_bulan: getNamaBulan(monthNum),
+      total_transaksi: rows.length,
+      total_nominal: `Rp${formatRupiah(totalNominal)}`,
+      total_nominal_raw: totalNominal,
+      total_hari_bertransaksi: Object.keys(groupedByDate).length,
+      data: formattedData
+    });
+    
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Helper functions
+function formatRupiah(number) {
+  return new Intl.NumberFormat('id-ID').format(number);
+}
+
+function formatTanggalIndonesia(dateString) {
+  const date = new Date(dateString);
+  const options = { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    timeZone: 'Asia/Jakarta'
+  };
+  return date.toLocaleDateString('id-ID', options);
+}
+
+function getNamaBulan(monthNum) {
+  const namaBulan = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  return namaBulan[monthNum - 1] || 'Unknown';
+}
+
 module.exports = router;
