@@ -19,6 +19,13 @@ function authKepalaGudang(req, res, next) {
   }
 }
 
+// Generate unique BAST ID (8 karakter)
+function generateBastId() {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substr(2, 4);
+  return `BAST${(timestamp + random).toUpperCase().substr(0, 4)}`;
+}
+
 router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
   const { dari, tujuan, tabung, keterangan, activity, status} = req.body;
   // tabung: array of tabung QR
@@ -28,7 +35,7 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
 
   // Validasi status harus sesuai ENUM database jika ada
   if (status) {
-    const validStatuses = ['Kosong', 'Isi'];
+    const validStatuses = ['Kosong', 'Isi', 'Rusak'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ 
         message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
@@ -75,15 +82,61 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
       [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
     );
 
-    // Update atau insert ke tabel stok_tabung untuk setiap kode_tabung
-    console.log('Starting stok_tabung update/insert process');
-    console.log('Tabung array:', tabung);
-    console.log('Status:', status);
-    console.log('Tujuan:', tujuan);
-    
+    // Jika status = Rusak dan nama_aktivitas = "Terima Tabung Dari Pelanggan" atau "Terima Tabung Dari Agen"
+    // maka insert ke tabel serah_terima_tabungs
+    let serahTerimaResult = null;
+    if (activity === "Terima Tabung Dari Pelanggan" || activity === "Terima Tabung Dari Agen") {
+      try {
+        // Pastikan tabel serah_terima_tabungs ada
+        await db.query(`
+          CREATE TABLE IF NOT EXISTS serah_terima_tabungs (
+            id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            bast_id VARCHAR(50) NULL DEFAULT NULL,
+            kode_pelanggan VARCHAR(50) NULL DEFAULT NULL,
+            tabung JSON NULL DEFAULT NULL,
+            total_harga DECIMAL(20,2) NULL DEFAULT NULL,
+            status VARCHAR(50) NULL DEFAULT NULL,
+            created_at TIMESTAMP NULL DEFAULT NULL,
+            updated_at TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (id)
+          )
+        `);
+        
+        const bast_id = generateBastId();
+        const total_harga = null; // sesuai permintaan user
+        
+        // Insert ke serah_terima_tabungs dengan kode_pelanggan dari parameter 'dari'
+        const [serahTerima] = await db.query(
+          'INSERT INTO serah_terima_tabungs (bast_id, kode_pelanggan, tabung, total_harga, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [bast_id, dari, JSON.stringify(tabung), total_harga, status, waktu, waktu]
+        );
+        
+        serahTerimaResult = {
+          id: serahTerima.insertId,
+          bast_id: bast_id,
+          kode_pelanggan: dari,
+          total_harga: total_harga,
+          status: status
+        };
+        
+        console.log('Serah terima tabung created for Rusak:', serahTerimaResult);
+        
+      } catch (serahTerimaError) {
+        console.error('Error creating serah terima tabung for Rusak:', serahTerimaError.message);
+        // Continue execution, don't fail the whole transaction
+      }
+    }
+
+    // Update atau insert ke tabel stok_tabung untuk setiap kode_tabung (skip jika status = Rusak)
     const stokResults = [];
     
-    for (const kode_tabung of tabung) {
+    if (status !== "Rusak" || status !== "Kosong" || status !== "Isi") {
+      console.log('Starting stok_tabung update/insert process');
+      console.log('Tabung array:', tabung);
+      console.log('Status:', status);
+      console.log('Tujuan:', tujuan);
+      
+      for (const kode_tabung of tabung) {
       try {
         console.log(`Processing tabung: ${kode_tabung}`);
         
@@ -128,22 +181,34 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
           error: stokError.message,
           success: false
         });
+        }
       }
+      
+      console.log('Finished stok_tabung update/insert process');
+      
+      res.json({ 
+        message: 'Sukses - Aktivitas dan stok_tabung berhasil diproses', 
+        id: result.insertId, 
+        total_tabung: total_tabung,
+        stok_results: stokResults,
+        stok_summary: {
+          total: tabung.length,
+          successful: stokResults.filter(r => r.success).length,
+          failed: stokResults.filter(r => !r.success).length
+        }
+      });
+    } else {
+      // Jika status = Rusak, tidak update stok_tabung
+      console.log('Skipping stok_tabung update for status: Rusak');
+      
+      res.json({ 
+        message: 'Sukses - Aktivitas berhasil disimpan (stok_tabung tidak diubah untuk status Rusak)', 
+        id: result.insertId, 
+        total_tabung: total_tabung,
+        status: status,
+        serah_terima: serahTerimaResult
+      });
     }
-    
-    console.log('Finished stok_tabung update/insert process');
-    
-    res.json({ 
-      message: 'Sukses - Aktivitas dan stok_tabung berhasil diproses', 
-      id: result.insertId, 
-      total_tabung: total_tabung,
-      stok_results: stokResults,
-      stok_summary: {
-        total: tabung.length,
-        successful: stokResults.filter(r => r.success).length,
-        failed: stokResults.filter(r => !r.success).length
-      }
-    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
