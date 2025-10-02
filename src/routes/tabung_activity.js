@@ -215,6 +215,7 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
   }
 });
 
+
 router.post('/laporan_pelanggan', authKepalaGudang, async (req, res) => {
   const { activity, dari, tujuan, tabung, keterangan, status } = req.body;
   
