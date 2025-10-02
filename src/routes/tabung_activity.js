@@ -189,6 +189,7 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
       res.json({ 
         message: 'Sukses - Aktivitas dan stok_tabung berhasil diproses', 
         id: result.insertId, 
+        serah_terima: serahTerimaResult,
         total_tabung: total_tabung,
         stok_results: stokResults,
         stok_summary: {
