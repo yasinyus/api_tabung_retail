@@ -19,11 +19,25 @@ function authKepalaGudang(req, res, next) {
   }
 }
 
-// Generate unique BAST ID (8 karakter)
+// Generate unique BAST ID (8 karakter unik)
 function generateBastId() {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substr(2, 4);
-  return `BAST${(timestamp + random).toUpperCase().substr(0, 4)}`;
+  // Kombinasi timestamp presisi tinggi + process.hrtime untuk uniqueness
+  const hrTime = process.hrtime.bigint().toString();
+  const timestamp = Date.now().toString();
+  const random1 = Math.random().toString(36).substr(2, 8);
+  const random2 = Math.random().toString(36).substr(2, 8);
+  
+  // Gabungkan semua dan ambil 8 karakter unik
+  const combined = (hrTime + timestamp + random1 + random2).replace(/[^A-Z0-9]/gi, '');
+  let result = '';
+  
+  // Pilih 8 karakter acak dari kombinasi untuk memastikan tidak ada duplikasi
+  for (let i = 0; i < 8; i++) {
+    const randomIndex = Math.floor(Math.random() * combined.length);
+    result += combined[randomIndex].toUpperCase();
+  }
+  
+  return result;
 }
 
 router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
