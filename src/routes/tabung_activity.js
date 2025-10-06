@@ -141,10 +141,11 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
       }
     }
 
-    // Update atau insert ke tabel stok_tabung untuk setiap kode_tabung (skip jika status = Rusak)
+    // Update atau insert ke tabel stok_tabung untuk setiap kode_tabung
     const stokResults = [];
     
-    if (status !== "Rusak" || status !== "Kosong" || status !== "Isi") {
+    // Skip stok_tabung update jika status = Refund
+    if (status !== "Refund") {
       console.log('Starting stok_tabung update/insert process');
       console.log('Tabung array:', tabung);
       console.log('Status:', status);
@@ -158,34 +159,70 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
         const [existingStok] = await db.query('SELECT id FROM stok_tabung WHERE kode_tabung = ?', [kode_tabung]);
         console.log(`Existing stok check for ${kode_tabung}:`, existingStok.length);
         
-        if (existingStok.length > 0) {
-          // Update jika sudah ada
-          console.log(`Updating existing stok for ${kode_tabung}`);
-          const [updateResult] = await db.query(
-            'UPDATE stok_tabung SET status = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?', 
-            [status || 'Kosong', tujuan, waktu, kode_tabung]
-          );
-          console.log(`Update result for ${kode_tabung}:`, updateResult.affectedRows);
-          stokResults.push({
-            kode_tabung: kode_tabung,
-            action: 'updated',
-            affectedRows: updateResult.affectedRows,
-            success: updateResult.affectedRows > 0
-          });
+        // Logic khusus untuk status "Rusak" pada aktivitas "Terima Tabung"
+        if (status === "Rusak" && (activity === "Terima Tabung Dari Pelanggan" || activity === "Terima Tabung Dari Agen")) {
+          if (existingStok.length > 0) {
+            // Update jika sudah ada, lokasi diisi dengan tujuan
+            console.log(`Updating existing stok for ${kode_tabung} with Rusak status - lokasi from tujuan`);
+            const [updateResult] = await db.query(
+              'UPDATE stok_tabung SET status = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?', 
+              [status, tujuan, waktu, kode_tabung]
+            );
+            console.log(`Update result for ${kode_tabung}:`, updateResult.affectedRows);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'updated',
+              affectedRows: updateResult.affectedRows,
+              success: updateResult.affectedRows > 0,
+              note: 'Rusak status - lokasi updated from tujuan'
+            });
+          } else {
+            // Insert jika belum ada, lokasi diisi dengan tujuan
+            console.log(`Inserting new stok for ${kode_tabung} with Rusak status - lokasi from tujuan`);
+            const [insertResult] = await db.query(
+              'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+              [kode_tabung, status, 0, tujuan, waktu, waktu]
+            );
+            console.log(`Insert result for ${kode_tabung}:`, insertResult.insertId);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'inserted',
+              insertId: insertResult.insertId,
+              success: insertResult.insertId > 0,
+              note: 'Rusak status - lokasi set from tujuan'
+            });
+          }
         } else {
-          // Insert jika belum ada
-          console.log(`Inserting new stok for ${kode_tabung}`);
-          const [insertResult] = await db.query(
-            'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [kode_tabung, status || 'Kosong', 0, tujuan, waktu, waktu]
-          );
-          console.log(`Insert result for ${kode_tabung}:`, insertResult.insertId);
-          stokResults.push({
-            kode_tabung: kode_tabung,
-            action: 'inserted',
-            insertId: insertResult.insertId,
-            success: insertResult.insertId > 0
-          });
+          // Logic normal untuk status selain Rusak
+          if (existingStok.length > 0) {
+            // Update jika sudah ada
+            console.log(`Updating existing stok for ${kode_tabung}`);
+            const [updateResult] = await db.query(
+              'UPDATE stok_tabung SET status = ?, lokasi = ?, tanggal_update = ? WHERE kode_tabung = ?', 
+              [status || 'Kosong', tujuan, waktu, kode_tabung]
+            );
+            console.log(`Update result for ${kode_tabung}:`, updateResult.affectedRows);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'updated',
+              affectedRows: updateResult.affectedRows,
+              success: updateResult.affectedRows > 0
+            });
+          } else {
+            // Insert jika belum ada
+            console.log(`Inserting new stok for ${kode_tabung}`);
+            const [insertResult] = await db.query(
+              'INSERT INTO stok_tabung (kode_tabung, status, volume, lokasi, tanggal_update, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+              [kode_tabung, status || 'Kosong', 0, tujuan, waktu, waktu]
+            );
+            console.log(`Insert result for ${kode_tabung}:`, insertResult.insertId);
+            stokResults.push({
+              kode_tabung: kode_tabung,
+              action: 'inserted',
+              insertId: insertResult.insertId,
+              success: insertResult.insertId > 0
+            });
+          }
         }
       } catch (stokError) {
         console.error(`Error updating stok_tabung for ${kode_tabung}:`, stokError.message);
@@ -200,8 +237,14 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
       
       console.log('Finished stok_tabung update/insert process');
       
+      // Message khusus untuk status Rusak pada Terima Tabung
+      let message = 'Sukses - Aktivitas dan stok_tabung berhasil diproses';
+      if (status === "Rusak" && (activity === "Terima Tabung Dari Pelanggan" || activity === "Terima Tabung Dari Agen")) {
+        message = 'Sukses - Aktivitas berhasil disimpan dan stok_tabung diupdate dengan status Rusak (lokasi dari tujuan)';
+      }
+      
       res.json({ 
-        message: 'Sukses - Aktivitas dan stok_tabung berhasil diproses', 
+        message: message, 
         id: result.insertId, 
         serah_terima: serahTerimaResult,
         total_tabung: total_tabung,
