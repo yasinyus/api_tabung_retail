@@ -256,8 +256,6 @@ router.get('/history/all', authUser, async (req, res) => {
         t.customer_id,
         p.kode_pelanggan,
         p.nama_pelanggan,
-        p.alamat as alamat_pelanggan,
-        p.telepon as telepon_pelanggan,
         p.harga_tabung as harga_per_tabung
       FROM aktivitas_tabung a
       LEFT JOIN transactions t ON a.id = t.aktivitas_id
@@ -333,8 +331,6 @@ router.get('/history/all', authUser, async (req, res) => {
           customer_id: record.customer_id,
           kode_pelanggan: record.kode_pelanggan,
           nama_pelanggan: record.nama_pelanggan,
-          alamat_pelanggan: record.alamat_pelanggan,
-          telepon_pelanggan: record.telepon_pelanggan,
           harga_per_tabung: hargaPerTabung
         } : null,
         // Harga kalkulasi real-time
