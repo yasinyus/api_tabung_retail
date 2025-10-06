@@ -233,7 +233,7 @@ router.get('/history/all', authUser, async (req, res) => {
     const totalRecords = countResult[0].total_records;
     const totalPages = Math.ceil(totalRecords / limit);
     
-    // Get aktivitas_tabung dengan JOIN ke transactions untuk mendapatkan trx_id
+    // Get aktivitas_tabung dengan JOIN ke transactions dan pelanggans untuk mendapatkan harga detail
     const [historyAll] = await db.query(`
       SELECT 
         a.id,
@@ -252,17 +252,58 @@ router.get('/history/all', authUser, async (req, res) => {
         t.id as transaction_id,
         t.type as transaction_type,
         t.total as transaction_total,
-        t.status as transaction_status
+        t.status as transaction_status,
+        t.customer_id,
+        p.kode_pelanggan,
+        p.nama_pelanggan,
+        p.alamat as alamat_pelanggan,
+        p.telepon as telepon_pelanggan,
+        p.harga_tabung as harga_per_tabung
       FROM aktivitas_tabung a
       LEFT JOIN transactions t ON a.id = t.aktivitas_id
+      LEFT JOIN pelanggans p ON t.customer_id = p.id
       WHERE a.id_user = ?${dateFilter}
       ORDER BY a.waktu DESC
       LIMIT ? OFFSET ?
     `, [...queryParams, parseInt(limit), offset]);
     
-    // Parse tabung JSON dan process transaction info untuk setiap record
-    const processedHistory = historyAll.map(record => {
+    // Parse tabung JSON dan process transaction info dengan harga detail untuk setiap record
+    const processedHistory = await Promise.all(historyAll.map(async (record) => {
       const tabungList = JSON.parse(record.tabung || '[]');
+      const hargaPerTabung = parseFloat(record.harga_per_tabung || 0);
+      
+      // Hitung harga detail per tabung berdasarkan volume dari stok_tabung
+      let tabungDetails = [];
+      let totalHargaCalculated = 0;
+      
+      if (Array.isArray(tabungList) && hargaPerTabung > 0) {
+        for (const kodeTabung of tabungList) {
+          try {
+            // Get volume dari stok_tabung untuk setiap kode_tabung
+            const [stokData] = await db.query('SELECT volume FROM stok_tabung WHERE kode_tabung = ?', [kodeTabung]);
+            const volume = stokData.length > 0 ? parseFloat(stokData[0].volume || 0) : 0;
+            const subtotal = volume * hargaPerTabung;
+            
+            tabungDetails.push({
+              kode_tabung: kodeTabung,
+              volume: volume,
+              harga_per_m3: hargaPerTabung,
+              subtotal: subtotal
+            });
+            
+            totalHargaCalculated += subtotal;
+          } catch (error) {
+            console.error(`Error getting volume for ${kodeTabung}:`, error.message);
+            tabungDetails.push({
+              kode_tabung: kodeTabung,
+              volume: 0,
+              harga_per_m3: hargaPerTabung,
+              subtotal: 0
+            });
+          }
+        }
+      }
+      
       return {
         id: record.id,
         dari: record.dari,
@@ -270,6 +311,7 @@ router.get('/history/all', authUser, async (req, res) => {
         tabung: record.tabung,
         tabung_list: tabungList,
         tabung_count: tabungList.length,
+        tabung_details: tabungDetails, // Detail harga per tabung
         keterangan: record.keterangan,
         nama_petugas: record.nama_petugas,
         total_tabung: record.total_tabung,
@@ -278,16 +320,31 @@ router.get('/history/all', authUser, async (req, res) => {
         nama_aktivitas: record.nama_aktivitas,
         status: record.status,
         created_at: record.created_at,
-        // Transaction info dari JOIN
+        // Transaction info dari JOIN dengan harga detail
         transaction_info: record.trx_id ? {
           trx_id: record.trx_id,
           transaction_id: record.transaction_id,
           transaction_type: record.transaction_type,
           transaction_total: parseFloat(record.transaction_total || 0),
           transaction_status: record.transaction_status
-        } : null
+        } : null,
+        // Customer info untuk invoice
+        customer_info: record.customer_id ? {
+          customer_id: record.customer_id,
+          kode_pelanggan: record.kode_pelanggan,
+          nama_pelanggan: record.nama_pelanggan,
+          alamat_pelanggan: record.alamat_pelanggan,
+          telepon_pelanggan: record.telepon_pelanggan,
+          harga_per_tabung: hargaPerTabung
+        } : null,
+        // Harga kalkulasi real-time
+        pricing_info: {
+          harga_per_m3: hargaPerTabung,
+          total_harga_calculated: parseFloat(totalHargaCalculated.toFixed(2)),
+          currency: 'IDR'
+        }
       };
-    });
+    }));
     
     // Get summary statistics
     const [summaryResult] = await db.query(`

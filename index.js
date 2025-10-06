@@ -25,6 +25,7 @@ const depositPelangganRoutes = require('./src/routes/deposit_pelanggan');
 const transaksiPelangganRoutes = require('./src/routes/transaksi_pelanggan');
 const aktivitasTransaksiRoutes = require('./src/routes/aktivitas_transaksi');
 const detailTransaksiRoutes = require('./src/routes/detail_transaksi');
+const cekSaldoPelangganRoutes = require('./src/routes/cek_saldo_pelanggan');
 const dashboardRoutes = require('./src/routes/dashboard');
 
 app.use('/pelanggan', saldoPelangganRoutes);
@@ -57,6 +58,8 @@ app.use('/pelanggan', transaksiPelangganRoutes);
 app.use('/api', aktivitasTransaksiRoutes);
 // DETAIL TRANSAKSI
 app.use('/api', detailTransaksiRoutes);
+// CEK SALDO PELANGGAN
+app.use('/api', cekSaldoPelangganRoutes);
 // DASHBOARD
 app.use('/api', dashboardRoutes);
 
