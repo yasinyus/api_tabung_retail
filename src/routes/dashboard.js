@@ -233,33 +233,61 @@ router.get('/history/all', authUser, async (req, res) => {
     const totalRecords = countResult[0].total_records;
     const totalPages = Math.ceil(totalRecords / limit);
     
-    // Get aktivitas_tabung berdasarkan id_user dengan pagination
+    // Get aktivitas_tabung dengan JOIN ke transactions untuk mendapatkan trx_id
     const [historyAll] = await db.query(`
       SELECT 
-        id,
-        dari,
-        tujuan,
-        tabung,
-        keterangan,
-        nama_petugas,
-        total_tabung,
-        tanggal,
-        waktu,
-        nama_aktivitas,
-        status,
-        created_at
-      FROM aktivitas_tabung 
-      WHERE id_user = ?${dateFilter}
-      ORDER BY waktu DESC
+        a.id,
+        a.dari,
+        a.tujuan,
+        a.tabung,
+        a.keterangan,
+        a.nama_petugas,
+        a.total_tabung,
+        a.tanggal,
+        a.waktu,
+        a.nama_aktivitas,
+        a.status,
+        a.created_at,
+        t.trx_id,
+        t.id as transaction_id,
+        t.type as transaction_type,
+        t.total as transaction_total,
+        t.status as transaction_status
+      FROM aktivitas_tabung a
+      LEFT JOIN transactions t ON a.id = t.aktivitas_id
+      WHERE a.id_user = ?${dateFilter}
+      ORDER BY a.waktu DESC
       LIMIT ? OFFSET ?
     `, [...queryParams, parseInt(limit), offset]);
     
-    // Parse tabung JSON untuk setiap record
-    const processedHistory = historyAll.map(record => ({
-      ...record,
-      tabung_list: JSON.parse(record.tabung || '[]'),
-      tabung_count: JSON.parse(record.tabung || '[]').length
-    }));
+    // Parse tabung JSON dan process transaction info untuk setiap record
+    const processedHistory = historyAll.map(record => {
+      const tabungList = JSON.parse(record.tabung || '[]');
+      return {
+        id: record.id,
+        dari: record.dari,
+        tujuan: record.tujuan,
+        tabung: record.tabung,
+        tabung_list: tabungList,
+        tabung_count: tabungList.length,
+        keterangan: record.keterangan,
+        nama_petugas: record.nama_petugas,
+        total_tabung: record.total_tabung,
+        tanggal: record.tanggal,
+        waktu: record.waktu,
+        nama_aktivitas: record.nama_aktivitas,
+        status: record.status,
+        created_at: record.created_at,
+        // Transaction info dari JOIN
+        transaction_info: record.trx_id ? {
+          trx_id: record.trx_id,
+          transaction_id: record.transaction_id,
+          transaction_type: record.transaction_type,
+          transaction_total: parseFloat(record.transaction_total || 0),
+          transaction_status: record.transaction_status
+        } : null
+      };
+    });
     
     // Get summary statistics
     const [summaryResult] = await db.query(`

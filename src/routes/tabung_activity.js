@@ -96,7 +96,7 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
       [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
     );
 
-    // Jika status = Rusak dan nama_aktivitas = "Terima Tabung Dari Pelanggan" atau "Terima Tabung Dari Agen"
+    // Jika status = Refund dan nama_aktivitas = "Terima Tabung Dari Pelanggan" atau "Terima Tabung Dari Agen"
     // maka insert ke tabel serah_terima_tabungs
     let serahTerimaResult = null;
     if (activity === "Terima Tabung Dari Pelanggan" || activity === "Terima Tabung Dari Agen") {
@@ -213,11 +213,11 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
         }
       });
     } else {
-      // Jika status = Rusak, tidak update stok_tabung
-      console.log('Skipping stok_tabung update for status: Rusak');
+      // Jika status = Refund, tidak update stok_tabung
+      console.log('Skipping stok_tabung update for status: Refund');
       
       res.json({ 
-        message: 'Sukses - Aktivitas berhasil disimpan (stok_tabung tidak diubah untuk status Rusak)', 
+        message: 'Sukses - Aktivitas berhasil disimpan (stok_tabung tidak diubah untuk status Refund)', 
         id: result.insertId, 
         total_tabung: total_tabung,
         status: status,

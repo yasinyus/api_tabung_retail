@@ -139,11 +139,14 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
       
       console.log('Finished stok_tabung update/insert process for Isi status');
       
-      // Insert ke tabel transactions
+      // Insert ke tabel transactions dengan aktivitas_id
       try {
+        const aktivitas_id = activityResult.insertId; // Ambil ID dari aktivitas_tabung yang baru diinsert
+        console.log('Aktivitas_tabung inserted with ID:', aktivitas_id);
+        
         const [transactionResult] = await db.query(
-          'INSERT INTO transactions (trx_id, user_id, customer_id, transaction_date, type, total, jumlah_tabung, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [trx_id, id_user, customer_id, transaction_date, 'purchase', total_harga, total_tabung, 'cash', 'paid', waktu]
+          'INSERT INTO transactions (trx_id, user_id, customer_id, aktivitas_id, transaction_date, type, total, jumlah_tabung, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [trx_id, id_user, customer_id, aktivitas_id, transaction_date, 'purchase', total_harga, total_tabung, 'cash', 'paid', waktu]
         );
         
         // Insert ke tabel detail_transaksi dengan array semua tabung
