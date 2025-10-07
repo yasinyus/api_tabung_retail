@@ -9,7 +9,7 @@ function authKepalaGudang(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    if (decoded.role !== 'kepala_gudang' && decoded.role !== 'driver') {
+    if (decoded.role !== 'kepala_gudang' && decoded.role !== 'driver' && decoded.role !== 'operator') {
       return res.status(403).json({ message: 'Forbidden: Not kepala_gudang or driver' });
     }
     req.user = decoded;
