@@ -28,6 +28,7 @@ const detailTransaksiRoutes = require('./src/routes/detail_transaksi');
 const cekSaldoPelangganRoutes = require('./src/routes/cek_saldo_pelanggan');
 const dashboardRoutes = require('./src/routes/dashboard');
 const historyVolumeRoutes = require('./src/routes/history_volume');
+const aktivitasTabungDetailRoutes = require('./src/routes/aktivitas_tabung_detail_simple');
 
 app.use('/pelanggan', saldoPelangganRoutes);
 
@@ -65,6 +66,8 @@ app.use('/api', cekSaldoPelangganRoutes);
 app.use('/api', dashboardRoutes);
 // HISTORY VOLUME
 app.use('/api/history-volume', historyVolumeRoutes);
+// AKTIVITAS TABUNG DETAIL
+app.use('/api/aktivitas-tabung', aktivitasTabungDetailRoutes);
 
 
 const PORT = process.env.PORT || 3000;
