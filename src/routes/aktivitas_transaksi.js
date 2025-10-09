@@ -167,12 +167,12 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
         const [saldoData] = await db.query('SELECT saldo FROM saldo_pelanggans WHERE kode_pelanggan = ?', [tujuan]);
         const sisa_deposit = saldoData.length > 0 ? saldoData[0].saldo : 0;
         
-        // Insert ke tabel laporan_pelanggan
+        // Insert ke tabel laporan_pelanggan dengan trx_id di kolom id_bast_invoice
         const today = new Date();
         const tanggal_laporan = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
         await db.query(
-          'INSERT INTO laporan_pelanggan (tanggal, kode_pelanggan, keterangan, tabung, harga, tambahan_deposit, pengurangan_deposit, sisa_deposit, konfirmasi, list_tabung, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [tanggal_laporan, tujuan, 'Tagihan', total_tabung, total_harga, 0, total_harga, sisa_deposit, 0, JSON.stringify(tabung), waktu]
+          'INSERT INTO laporan_pelanggan (tanggal, kode_pelanggan, keterangan, tabung, harga, tambahan_deposit, pengurangan_deposit, sisa_deposit, konfirmasi, list_tabung, id_bast_invoice, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [tanggal_laporan, tujuan, 'Tagihan', total_tabung, total_harga, 0, total_harga, sisa_deposit, 0, JSON.stringify(tabung), trx_id, waktu]
         );
         
         res.json({ 
