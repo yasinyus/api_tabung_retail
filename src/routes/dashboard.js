@@ -233,7 +233,7 @@ router.get('/history/all', authUser, async (req, res) => {
     const totalRecords = countResult[0].total_records;
     const totalPages = Math.ceil(totalRecords / limit);
     
-    // Get aktivitas_tabung dengan JOIN ke transactions dan pelanggans untuk mendapatkan harga detail
+    // Get aktivitas_tabung dengan subquery untuk menghindari duplikasi
     const [historyAll] = await db.query(`
       SELECT 
         a.id,
@@ -256,12 +256,14 @@ router.get('/history/all', authUser, async (req, res) => {
         t.customer_id,
         p.kode_pelanggan,
         p.nama_pelanggan,
-        p.harga_tabung as harga_per_tabung
+        p.harga_tabung as harga_per_tabung,
+        (SELECT bast_id FROM serah_terima_tabungs WHERE aktivitas_id = a.id LIMIT 1) as bast_id,
+        (SELECT id FROM serah_terima_tabungs WHERE aktivitas_id = a.id LIMIT 1) as serah_terima_id
       FROM aktivitas_tabung a
       LEFT JOIN transactions t ON a.id = t.aktivitas_id
       LEFT JOIN pelanggans p ON t.customer_id = p.id
       WHERE a.id_user = ?${dateFilter}
-      ORDER BY a.waktu DESC
+      ORDER BY a.id DESC, a.waktu DESC
       LIMIT ? OFFSET ?
     `, [...queryParams, parseInt(limit), offset]);
     
@@ -325,6 +327,11 @@ router.get('/history/all', authUser, async (req, res) => {
           transaction_type: record.transaction_type,
           transaction_total: parseFloat(record.transaction_total || 0),
           transaction_status: record.transaction_status
+        } : null,
+        // Serah Terima info dari JOIN
+        serah_terima_info: record.bast_id ? {
+          bast_id: record.bast_id,
+          serah_terima_id: record.serah_terima_id
         } : null,
         // Customer info untuk invoice
         customer_info: record.customer_id ? {

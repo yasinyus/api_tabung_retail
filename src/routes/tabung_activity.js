@@ -99,13 +99,14 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
     // Jika status = Refund dan nama_aktivitas = "Terima Tabung Dari Pelanggan" atau "Terima Tabung Dari Agen"
     // maka insert ke tabel serah_terima_tabungs
     let serahTerimaResult = null;
-    if (activity === "Terima Tabung Dari Pelanggan" || activity === "Terima Tabung Dari Agen") {
+    if (activity === "Terima Tabung Dari Pelanggan" || activity === "Terima Tabung Dari Agen" || activity === "Kirim Tabung ke Armada" || activity === "Terima Tabung Dari Armada" || activity === "Terima Tabung ke Armada") {
       try {
         // Pastikan tabel serah_terima_tabungs ada
         await db.query(`
           CREATE TABLE IF NOT EXISTS serah_terima_tabungs (
             id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
             bast_id VARCHAR(50) NULL DEFAULT NULL,
+            aktivitas_id VARCHAR(50) NULL DEFAULT NULL,
             kode_pelanggan VARCHAR(50) NULL DEFAULT NULL,
             tabung JSON NULL DEFAULT NULL,
             total_harga DECIMAL(20,2) NULL DEFAULT NULL,
@@ -119,15 +120,16 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
         const bast_id = generateBastId();
         const total_harga = null; // sesuai permintaan user
         
-        // Insert ke serah_terima_tabungs dengan kode_pelanggan dari parameter 'dari'
+        // Insert ke serah_terima_tabungs dengan kode_pelanggan dari parameter 'dari' dan aktivitas_id
         const [serahTerima] = await db.query(
-          'INSERT INTO serah_terima_tabungs (bast_id, kode_pelanggan, tabung, total_harga, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [bast_id, dari, JSON.stringify(tabung), total_harga, status, waktu, waktu]
+          'INSERT INTO serah_terima_tabungs (bast_id, aktivitas_id, kode_pelanggan, tabung, total_harga, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [bast_id, result.insertId, dari, JSON.stringify(tabung), total_harga, status, waktu, waktu]
         );
         
         serahTerimaResult = {
           id: serahTerima.insertId,
           bast_id: bast_id,
+          aktivitas_id: result.insertId,
           kode_pelanggan: dari,
           total_harga: total_harga,
           status: status
