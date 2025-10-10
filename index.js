@@ -29,6 +29,7 @@ const cekSaldoPelangganRoutes = require('./src/routes/cek_saldo_pelanggan');
 const dashboardRoutes = require('./src/routes/dashboard');
 const historyVolumeRoutes = require('./src/routes/history_volume');
 const aktivitasTabungDetailRoutes = require('./src/routes/aktivitas_tabung_detail_simple');
+const stokTabungRoutes = require('./src/routes/stok_tabung');
 
 app.use('/pelanggan', saldoPelangganRoutes);
 
@@ -68,6 +69,8 @@ app.use('/api', dashboardRoutes);
 app.use('/api/history-volume', historyVolumeRoutes);
 // AKTIVITAS TABUNG DETAIL
 app.use('/api/aktivitas-tabung', aktivitasTabungDetailRoutes);
+// STOK TABUNG
+app.use('/api/stok-tabung', stokTabungRoutes);
 
 
 const PORT = process.env.PORT || 3000;
