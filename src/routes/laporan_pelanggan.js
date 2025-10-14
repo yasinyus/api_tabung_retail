@@ -140,6 +140,188 @@ router.get('/:kode_pelanggan', authUser, async (req, res) => {
   }
 });
 
+// Function helper untuk nama bulan
+function getNamaBulan(bulan) {
+  const namaBulan = [
+    '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  return namaBulan[parseInt(bulan)] || 'Unknown';
+}
+
+// GET /api/laporan-pelanggan/:kode_pelanggan/:tahun/:bulan - Mendapatkan laporan pelanggan per bulan
+router.get('/:kode_pelanggan/:tahun/:bulan', authUser, async (req, res) => {
+  const { kode_pelanggan, tahun, bulan } = req.params;
+  
+  if (!kode_pelanggan || !tahun || !bulan) {
+    return res.status(400).json({ 
+      message: 'Parameter wajib diisi: kode_pelanggan, tahun, bulan' 
+    });
+  }
+  
+  // Validasi format tahun dan bulan
+  const yearNum = parseInt(tahun);
+  const monthNum = parseInt(bulan);
+  
+  if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+    return res.status(400).json({ 
+      message: 'Format tahun tidak valid (2020-2030)' 
+    });
+  }
+  
+  if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+    return res.status(400).json({ 
+      message: 'Format bulan tidak valid (1-12)' 
+    });
+  }
+  
+  try {
+    // Get info pelanggan
+    const [pelangganInfo] = await db.query(
+      'SELECT nama_pelanggan FROM pelanggans WHERE kode_pelanggan = ?', 
+      [kode_pelanggan]
+    );
+
+    if (pelangganInfo.length === 0) {
+      return res.status(404).json({ 
+        message: 'Pelanggan tidak ditemukan',
+        kode_pelanggan: kode_pelanggan
+      });
+    }
+
+    const pelanggan = pelangganInfo[0];
+
+    // Query laporan berdasarkan kode_pelanggan dan bulan/tahun
+    const [rows] = await db.query(`
+      SELECT 
+        id,
+        tanggal,
+        kode_pelanggan,
+        keterangan,
+        tabung,
+        harga,
+        tambahan_deposit,
+        pengurangan_deposit,
+        sisa_deposit,
+        konfirmasi,
+        list_tabung,
+        id_bast_invoice,
+        created_at,
+        DATE(tanggal) as tanggal_only,
+        TIME(created_at) as waktu
+      FROM laporan_pelanggan
+      WHERE kode_pelanggan = ? 
+        AND YEAR(tanggal) = ? 
+        AND MONTH(tanggal) = ?
+      ORDER BY tanggal DESC, created_at DESC
+    `, [kode_pelanggan, yearNum, monthNum]);
+    
+    if (rows.length === 0) {
+      return res.json({ 
+        message: 'Tidak ada laporan pada bulan tersebut',
+        kode_pelanggan: kode_pelanggan,
+        nama_pelanggan: pelanggan.nama_pelanggan,
+        periode: `${getNamaBulan(monthNum)} ${tahun}`,
+        total_laporan: 0,
+        total_tabung: 0,
+        total_harga: 0,
+        data: []
+      });
+    }
+    
+    // Group laporan berdasarkan tanggal
+    const groupedByDate = {};
+    let totalTabung = 0;
+    let totalHarga = 0;
+    let totalTambahanDeposit = 0;
+    let totalPenguranganDeposit = 0;
+    let sisaDepositTerakhir = 0;
+    
+    rows.forEach(row => {
+      const tanggal = row.tanggal_only;
+      const harga = parseFloat(row.harga) || 0;
+      const tabung = parseInt(row.tabung) || 0;
+      const tambahanDeposit = parseFloat(row.tambahan_deposit) || 0;
+      const penguranganDeposit = parseFloat(row.pengurangan_deposit) || 0;
+      
+      totalTabung += tabung;
+      totalHarga += harga;
+      totalTambahanDeposit += tambahanDeposit;
+      totalPenguranganDeposit += penguranganDeposit;
+      sisaDepositTerakhir = parseFloat(row.sisa_deposit) || 0; // Ambil yang terakhir
+      
+      if (!groupedByDate[tanggal]) {
+        groupedByDate[tanggal] = [];
+      }
+      
+      // Parse list tabung jika ada
+      let listTabung = [];
+      if (row.list_tabung) {
+        try {
+          listTabung = JSON.parse(row.list_tabung);
+        } catch (e) {
+          listTabung = [];
+        }
+      }
+      
+      groupedByDate[tanggal].push({
+        id: row.id,
+        keterangan: row.keterangan,
+        tabung: tabung,
+        harga: harga,
+        tambahan_deposit: tambahanDeposit,
+        pengurangan_deposit: penguranganDeposit,
+        sisa_deposit: parseFloat(row.sisa_deposit) || 0,
+        konfirmasi: row.konfirmasi,
+        list_tabung: listTabung,
+        total_tabung_in_list: listTabung.length,
+        id_bast_invoice: row.id_bast_invoice,
+        waktu: row.waktu,
+        created_at: row.created_at
+      });
+    });
+    
+    // Convert grouped data ke format yang lebih readable
+    const dataPerTanggal = Object.keys(groupedByDate)
+      .sort((a, b) => new Date(b) - new Date(a)) // Sort tanggal desc
+      .map(tanggal => ({
+        tanggal: tanggal,
+        total_laporan_hari: groupedByDate[tanggal].length,
+        total_tabung_hari: groupedByDate[tanggal].reduce((sum, item) => sum + item.tabung, 0),
+        total_harga_hari: groupedByDate[tanggal].reduce((sum, item) => sum + item.harga, 0),
+        laporan: groupedByDate[tanggal]
+      }));
+    
+    res.json({
+      message: 'Laporan pelanggan bulanan berhasil diambil',
+      kode_pelanggan: kode_pelanggan,
+      nama_pelanggan: pelanggan.nama_pelanggan,
+      periode: `${getNamaBulan(monthNum)} ${tahun}`,
+      tahun: yearNum,
+      bulan: monthNum,
+      nama_bulan: getNamaBulan(monthNum),
+      summary: {
+        total_laporan: rows.length,
+        total_tabung: totalTabung,
+        total_harga: parseFloat(totalHarga.toFixed(2)),
+        total_tambahan_deposit: parseFloat(totalTambahanDeposit.toFixed(2)),
+        total_pengurangan_deposit: parseFloat(totalPenguranganDeposit.toFixed(2)),
+        sisa_deposit_terakhir: parseFloat(sisaDepositTerakhir.toFixed(2)),
+        total_hari_aktif: Object.keys(groupedByDate).length
+      },
+      data: dataPerTanggal
+    });
+    
+  } catch (err) {
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: err.message,
+      kode_pelanggan: kode_pelanggan,
+      periode: `${getNamaBulan(monthNum)} ${tahun}`
+    });
+  }
+});
+
 // GET /api/laporan-pelanggan/detail/:id - Mendapatkan detail laporan berdasarkan ID
 router.get('/detail/:id', authUser, async (req, res) => {
   try {
