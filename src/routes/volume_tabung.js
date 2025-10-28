@@ -31,8 +31,9 @@ router.post('/simpan', authUser, async (req, res) => {
     });
   }
   
-  // Hitung volume per tabung dari pembagian volume_total
-  const volume_per_tabung = volume_total / tabung.length;
+  // Hitung volume per tabung dari pembagian volume_total dan bulatkan ke atas 2 angka di belakang koma
+  let volume_per_tabung = volume_total / tabung.length;
+  volume_per_tabung = Math.ceil(volume_per_tabung * 100) / 100;
   
   // Update array tabung dengan volume yang dihitung
   const tabungWithVolume = tabung.map(item => ({

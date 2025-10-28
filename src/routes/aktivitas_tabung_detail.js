@@ -58,64 +58,63 @@ router.get('/:id', authUser, async (req, res) => {
       }
     });
 
+
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+
+// GET /api/aktivitas-tabung/statistik - Mendapatkan statistik aktivitas tabung
+router.get('/statistik/summary', authUser, async (req, res) => {
+  try {
+    const { periode = '30' } = req.query; // Default 30 hari terakhir
+
+    // Total aktivitas
+    const [totalAktivitas] = await db.query(`
+      SELECT 
+        COUNT(*) as total_aktivitas,
+        SUM(total_tabung) as total_tabung_processed
+      FROM aktivitas_tabung
+      WHERE waktu >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    `, [parseInt(periode)]);
+
+    // Aktivitas per status
+    const [statusStats] = await db.query(`
+      SELECT 
+        status,
+        COUNT(*) as jumlah,
+        SUM(total_tabung) as total_tabung
+      FROM aktivitas_tabung
+      WHERE waktu >= DATE_SUB(NOW(), INTERVAL ? DAY)
+      GROUP BY status
+      ORDER BY jumlah DESC
+    `, [parseInt(periode)]);
+
+    // Aktivitas per nama_aktivitas
+    const [aktivitasStats] = await db.query(`
+      SELECT 
+        nama_aktivitas,
+        COUNT(*) as jumlah,
+        SUM(total_tabung) as total_tabung
+      FROM aktivitas_tabung
+      WHERE waktu >= DATE_SUB(NOW(), INTERVAL ? DAY)
+      GROUP BY nama_aktivitas
+      ORDER BY jumlah DESC
+    `, [parseInt(periode)]);
+
+    res.json({
+      message: 'Statistik aktivitas tabung berhasil diambil',
+      total_aktivitas: totalAktivitas[0],
+      status_stats: statusStats,
+      aktivitas_stats: aktivitasStats
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
 module.exports = router;
-
-    // Parse JSON tabung untuk setiap record
-    const processedData = data.map(record => {
-      let tabungArray = [];
-      try {
-        tabungArray = typeof record.tabung === 'string' ? JSON.parse(record.tabung) : record.tabung;
-        if (!Array.isArray(tabungArray)) {
-          tabungArray = [];
-        }
-      } catch (e) {
-        console.error('Error parsing tabung JSON:', e);
-        tabungArray = [];
-      }
-      
-      return {
-        ...record,
-        tabung: tabungArray,
-        total_tabung_actual: tabungArray.length
-      };
-    });
-
-    // Hitung statistik
-    const totalPages = Math.ceil(totalRecords / parseInt(limit));
-    const hasNextPage = parseInt(page) < totalPages;
-    const hasPrevPage = parseInt(page) > 1;
-
-    res.json({
-      message: 'Daftar aktivitas tabung berhasil diambil',
-      data: processedData,
-      pagination: {
-        current_page: parseInt(page),
-        per_page: parseInt(limit),
-        total_records: totalRecords,
-        total_pages: totalPages,
-        has_next_page: hasNextPage,
-        has_prev_page: hasPrevPage
-      },
-      filters: {
-        search: search || null,
-        status: status || null,
-        nama_aktivitas: nama_aktivitas || null,
-        tanggal_dari: tanggal_dari || null,
-        tanggal_sampai: tanggal_sampai || null,
-        sort_by: sortField,
-        sort_order: sortDirection
-      }
-    });
-
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
 
 // GET /api/aktivitas-tabung/statistik - Mendapatkan statistik aktivitas tabung
 router.get('/statistik/summary', authUser, async (req, res) => {

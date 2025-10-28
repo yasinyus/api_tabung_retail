@@ -32,6 +32,8 @@ const aktivitasTabungDetailRoutes = require('./src/routes/aktivitas_tabung_detai
 const stokTabungRoutes = require('./src/routes/stok_tabung');
 const laporanPelangganRoutes = require('./src/routes/laporan_pelanggan');
 
+const cekTabungRoutes = require('./src/routes/cek_tabung');
+
 app.use('/pelanggan', saldoPelangganRoutes);
 
 // Routes
@@ -74,6 +76,9 @@ app.use('/api/aktivitas-tabung', aktivitasTabungDetailRoutes);
 app.use('/api/stok-tabung', stokTabungRoutes);
 // LAPORAN PELANGGAN
 app.use('/api/laporan-pelanggan', laporanPelangganRoutes);
+
+// CEK TABUNG
+app.use('/api', cekTabungRoutes);
 
 
 const PORT = process.env.PORT || 3000;
