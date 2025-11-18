@@ -90,10 +90,19 @@ router.post('/tabung_activity', authKepalaGudang, async (req, res) => {
   const waktu = new Date(); // datetime otomatis
   
   try {
+    // Hitung total_volume dari stok_tabung
+    let total_volume = 0;
+    const placeholders = tabung.map(() => '?').join(',');
+    const [volumeData] = await db.query(
+      `SELECT COALESCE(SUM(volume), 0) as total FROM stok_tabung WHERE kode_tabung IN (${placeholders})`,
+      tabung
+    );
+    total_volume = parseFloat(volumeData[0].total) || 0;
+
     // Insert ke aktivitas_tabung
     const [result] = await db.query(
-      'INSERT INTO aktivitas_tabung (dari, tujuan, tabung, keterangan, nama_petugas, id_user, total_tabung, tanggal, waktu, nama_aktivitas, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
+      'INSERT INTO aktivitas_tabung (dari, tujuan, tabung, keterangan, nama_petugas, id_user, total_tabung, total_volume, tanggal, waktu, nama_aktivitas, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, total_volume, tanggal, waktu, activity, status]
     );
 
     // Jika status = Refund dan nama_aktivitas = "Terima Tabung Dari Pelanggan" atau "Terima Tabung Dari Agen"
