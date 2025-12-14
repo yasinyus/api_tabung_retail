@@ -75,10 +75,16 @@ router.post('/aktivitas-transaksi', authKepalaGudang, async (req, res) => {
     }      // Generate transaction ID
       const trx_id = generateTrxId();
       
+      // Hitung total_volume dari tabung_details
+      let total_volume = 0;
+      for (const detail of tabung_details) {
+        total_volume += detail.volume;
+      }
+      
       // Insert ke tabel aktivitas_tabung
       const [activityResult] = await db.query(
-        'INSERT INTO aktivitas_tabung (dari, tujuan, tabung, keterangan, nama_petugas, id_user, total_tabung, tanggal, waktu, nama_aktivitas, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, tanggal, waktu, activity, status]
+        'INSERT INTO aktivitas_tabung (dari, tujuan, tabung, keterangan, nama_petugas, id_user, total_tabung, total_volume, tanggal, waktu, nama_aktivitas, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [dari, tujuan, JSON.stringify(tabung), keterangan || '', nama_petugas, id_user, total_tabung, total_volume, tanggal, waktu, activity, status]
       );
       
       // Update atau insert ke tabel stok_tabung berdasarkan kode_tabung
